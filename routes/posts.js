@@ -10,10 +10,11 @@ const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 
-// Configure multer for file uploads
+// Configure multer for file uploads - use /tmp for Vercel serverless
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads');
+    // Use /tmp directory for Vercel serverless environment
+    const uploadDir = '/tmp/uploads';
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
