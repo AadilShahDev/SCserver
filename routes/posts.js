@@ -88,24 +88,22 @@ async function postToTwitter(content, mediaPath, credentials) {
 // Post to Facebook
 async function postToFacebook(content, mediaPath, pageId, accessToken) {
   try {
-    const postData = {
-      message: content
-    };
-
-    let endpoint = `https://graph.facebook.com/v18.0/${pageId}/feed`;
-
-    // If media exists, use photos endpoint
+    // If media exists, use photos endpoint with proper parameters
     if (mediaPath && fs.existsSync(mediaPath)) {
       const formData = new FormData();
       formData.append('message', content);
       formData.append('source', fs.createReadStream(mediaPath));
-      formData.append('access_token', accessToken);
 
-      endpoint = `https://graph.facebook.com/v18.0/${pageId}/photos`;
-      
-      const response = await axios.post(endpoint, formData, {
-        headers: formData.getHeaders()
-      });
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${pageId}/photos`,
+        formData,
+        {
+          params: {
+            access_token: accessToken
+          },
+          headers: formData.getHeaders()
+        }
+      );
 
       return {
         success: true,
@@ -113,13 +111,18 @@ async function postToFacebook(content, mediaPath, pageId, accessToken) {
         postedAt: new Date()
       };
     } else {
-      // Text-only post
-      const response = await axios.post(endpoint, null, {
-        params: {
-          message: content,
-          access_token: accessToken
+      // Text-only post to page feed
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${pageId}/feed`,
+        {
+          message: content
+        },
+        {
+          params: {
+            access_token: accessToken
+          }
         }
-      });
+      );
 
       return {
         success: true,
