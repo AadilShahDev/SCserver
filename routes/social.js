@@ -139,35 +139,15 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
 
     console.log('Connecting Facebook - Page ID:', pageId);
 
-    // First, get user's pages to get the Page Access Token
-    const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
+    // Verify the token is a Page Access Token by fetching page info directly
+    const pageResponse = await axios.get(`https://graph.facebook.com/v18.0/${pageId}`, {
       params: {
+        fields: 'id,name,access_token',
         access_token: accessToken
       }
     });
 
-    console.log('Pages response:', pagesResponse.data);
-
-    // Find the specific page
-    const page = pagesResponse.data.data.find(p => p.id === pageId);
-    
-    if (!page) {
-      return res.status(400).json({ 
-        message: 'Page not found. Make sure you have admin access to this page.',
-        availablePages: pagesResponse.data.data.map(p => ({ id: p.id, name: p.name }))
-      });
-    }
-
-    // Use the Page Access Token (not user token)
-    const pageAccessToken = page.access_token;
-
-    // Verify page access
-    const pageResponse = await axios.get(`https://graph.facebook.com/v18.0/${pageId}`, {
-      params: {
-        fields: 'id,name',
-        access_token: pageAccessToken
-      }
-    });
+    console.log('Page verified:', pageResponse.data);
 
     // Update user in database
     const user = await User.findByIdAndUpdate(
@@ -175,10 +155,10 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
       {
         'connectedAccounts.facebook': {
           connected: true,
-          accessToken: pageAccessToken,
+          accessToken: accessToken,
           pageId: pageResponse.data.id,
           pageName: pageResponse.data.name,
-          userId: pagesResponse.data.data[0]?.id || pageId
+          userId: pageId
         }
       },
       { new: true }
@@ -191,7 +171,7 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Facebook connection error:', error.response?.data || error);
     res.status(500).json({ 
-      message: 'Failed to connect Facebook account',
+      message: 'Failed to connect Facebook account. Make sure you are using a Page Access Token with proper permissions.',
       error: error.response?.data?.error?.message || error.message,
       details: error.response?.data
     });
