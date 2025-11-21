@@ -137,20 +137,35 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
   try {
     const { accessToken, pageId } = req.body;
 
-    // Verify Facebook token by fetching page info
-    const pageResponse = await axios.get(`https://graph.facebook.com/v18.0/${pageId}`, {
+    console.log('Connecting Facebook - Page ID:', pageId);
+
+    // First, get user's pages to get the Page Access Token
+    const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
       params: {
-        fields: 'id,name,access_token',
         access_token: accessToken
       }
     });
 
-    const pageData = pageResponse.data;
+    console.log('Pages response:', pagesResponse.data);
 
-    // Also get user info
-    const userResponse = await axios.get('https://graph.facebook.com/v18.0/me', {
+    // Find the specific page
+    const page = pagesResponse.data.data.find(p => p.id === pageId);
+    
+    if (!page) {
+      return res.status(400).json({ 
+        message: 'Page not found. Make sure you have admin access to this page.',
+        availablePages: pagesResponse.data.data.map(p => ({ id: p.id, name: p.name }))
+      });
+    }
+
+    // Use the Page Access Token (not user token)
+    const pageAccessToken = page.access_token;
+
+    // Verify page access
+    const pageResponse = await axios.get(`https://graph.facebook.com/v18.0/${pageId}`, {
       params: {
-        access_token: accessToken
+        fields: 'id,name',
+        access_token: pageAccessToken
       }
     });
 
@@ -160,10 +175,10 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
       {
         'connectedAccounts.facebook': {
           connected: true,
-          accessToken: pageData.access_token || accessToken,
-          pageId: pageData.id,
-          pageName: pageData.name,
-          userId: userResponse.data.id
+          accessToken: pageAccessToken,
+          pageId: pageResponse.data.id,
+          pageName: pageResponse.data.name,
+          userId: pagesResponse.data.data[0]?.id || pageId
         }
       },
       { new: true }
@@ -174,10 +189,11 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
       connectedAccounts: user.connectedAccounts
     });
   } catch (error) {
-    console.error('Facebook connection error:', error);
+    console.error('Facebook connection error:', error.response?.data || error);
     res.status(500).json({ 
       message: 'Failed to connect Facebook account',
-      error: error.response?.data?.error?.message || error.message 
+      error: error.response?.data?.error?.message || error.message,
+      details: error.response?.data
     });
   }
 });
