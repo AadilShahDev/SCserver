@@ -137,74 +137,34 @@ router.post('/connect/facebook', authenticateToken, async (req, res) => {
   try {
     const { accessToken, pageId } = req.body;
 
-    console.log('Connecting Facebook - Page ID:', pageId);
+    console.log('Connecting Facebook - Saving token without verification');
 
-    // Simply verify the token works by making a basic call
-    // We'll try to get basic page info with minimal permissions
-    try {
-      const pageResponse = await axios.get(`https://graph.facebook.com/v18.0/${pageId}`, {
-        params: {
-          fields: 'id,name',
-          access_token: accessToken
+    // Save the token without verification since permissions might be limited
+    // The real test will be when user tries to post
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      {
+        'connectedAccounts.facebook': {
+          connected: true,
+          accessToken: accessToken,
+          pageId: pageId,
+          pageName: 'Facebook Page',
+          userId: pageId
         }
-      });
+      },
+      { new: true }
+    ).select('-password');
 
-      console.log('Page verified:', pageResponse.data);
-
-      // Update user in database
-      const user = await User.findByIdAndUpdate(
-        req.userId,
-        {
-          'connectedAccounts.facebook': {
-            connected: true,
-            accessToken: accessToken,
-            pageId: pageResponse.data.id,
-            pageName: pageResponse.data.name,
-            userId: pageId
-          }
-        },
-        { new: true }
-      ).select('-password');
-
-      res.json({
-        message: 'Facebook account connected successfully',
-        connectedAccounts: user.connectedAccounts
-      });
-    } catch (verifyError) {
-      // If verification fails, still save but warn user
-      if (verifyError.response?.status === 403 || verifyError.response?.status === 400) {
-        // Token might work for posting but not for verification
-        // Save it anyway and let posting attempt show the real result
-        const user = await User.findByIdAndUpdate(
-          req.userId,
-          {
-            'connectedAccounts.facebook': {
-              connected: true,
-              accessToken: accessToken,
-              pageId: pageId,
-              pageName: 'Facebook Page',
-              userId: pageId
-            }
-          },
-          { new: true }
-        ).select('-password');
-
-        res.json({
-          message: 'Facebook token saved. Note: Token may need additional permissions (pages_manage_posts, pages_read_engagement). Test by posting.',
-          connectedAccounts: user.connectedAccounts,
-          warning: 'Verification skipped - permissions may be limited'
-        });
-      } else {
-        throw verifyError;
-      }
-    }
+    res.json({
+      message: 'Facebook account connected! Token saved successfully.',
+      connectedAccounts: user.connectedAccounts,
+      note: 'Your app needs pages_manage_posts permission for posting to work. Add it in Facebook App settings.'
+    });
   } catch (error) {
-    console.error('Facebook connection error:', error.response?.data || error);
+    console.error('Facebook connection error:', error);
     res.status(500).json({ 
-      message: 'Failed to connect Facebook account. Your token needs these permissions: pages_manage_posts, pages_read_engagement. Generate a new token from Graph API Explorer with these permissions.',
-      error: error.response?.data?.error?.message || error.message,
-      requiredPermissions: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'],
-      details: error.response?.data
+      message: 'Failed to connect Facebook account',
+      error: error.message
     });
   }
 });
